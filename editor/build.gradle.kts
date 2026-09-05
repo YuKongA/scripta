@@ -12,7 +12,7 @@ kotlin {
         namespace = "top.yukonga.scripta.editor"
         compileSdk {
             version = release(37) {
-                minorApiLevel = 0
+                minorApiLevel = 2
             }
         }
         minSdk = 24

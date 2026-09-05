@@ -17,7 +17,7 @@ kotlin {
         namespace = "top.yukonga.scripta.sandbox.shared"
         compileSdk {
             version = release(37) {
-                minorApiLevel = 0
+                minorApiLevel = 2
             }
         }
         minSdk = 24

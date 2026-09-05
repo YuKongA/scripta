@@ -27,7 +27,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import top.yukonga.scripta.editor.EditorEngine
-import top.yukonga.scripta.editor.text.TextPosition
 import top.yukonga.scripta.editor.text.TextRange as EditorTextRange
 
 /**
@@ -118,12 +117,14 @@ private class ScriptaImeRequest(
 
     /** 引擎活文本上的 CharSequence + 选区/预编辑区间。selection/composition 读快照 state（见类头注释）。 */
     override val state: TextEditorState = object : TextEditorState {
+        override val text: String get() = engine.getText()
+
         override val length: Int get() = engine.buffer.totalLength()
 
         override fun get(index: Int): Char {
             // CharSequence 契约：合法下标 0..length-1。Compose 的 IME 查询遵守边界，此守卫仅防御越界消费者——
             // 否则 index==length 时两个 positionAt 都夹到末尾、textInRange 返回空串、[0] 抛不直观的异常。
-            if (index < 0 || index >= length) throw IndexOutOfBoundsException("index=$index, length=$length")
+            if (index !in 0..<length) throw IndexOutOfBoundsException("index=$index, length=$length")
             return engine.buffer.textInRange(
                 EditorTextRange(engine.buffer.positionAt(index), engine.buffer.positionAt(index + 1))
             )[0]
@@ -179,8 +180,14 @@ private class ScriptaImeRequest(
             override fun deleteSurroundingTextInCodePoints(lengthBeforeCursor: Int, lengthAfterCursor: Int) =
                 engine.deleteSurroundingTextInCodePoints(lengthBeforeCursor, lengthAfterCursor)
 
+            override fun setSelection(start: Int, end: Int) =
+                engine.setSelection(engine.buffer.positionAt(start), engine.buffer.positionAt(end), keepComposing = true)
+
             override fun commitText(text: CharSequence, newCursorPosition: Int) =
                 engine.commitText(text.toString(), newCursorPosition)
+
+            override fun setComposingRegion(start: Int, end: Int) =
+                engine.setComposingRegion(start, end)
 
             override fun setComposingText(text: CharSequence, newCursorPosition: Int) =
                 engine.setComposingText(text.toString(), newCursorPosition)
