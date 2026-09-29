@@ -85,6 +85,7 @@ import top.yukonga.scripta.editor.find.FindReplaceBar
 import top.yukonga.scripta.editor.find.GotoLineBar
 import top.yukonga.scripta.editor.highlight.HighlightCache
 import top.yukonga.scripta.editor.highlight.HighlightSpan
+import top.yukonga.scripta.editor.highlight.JavaScriptHighlighter
 import top.yukonga.scripta.editor.highlight.SyntaxHighlighter
 import top.yukonga.scripta.editor.highlight.YamlHighlighter
 import top.yukonga.scripta.editor.highlight.highlightedText
@@ -369,6 +370,7 @@ fun CodeEditor(
     // 语法高亮：显式插件优先，否则按 language 选内置。行状态链缓存随插件/引擎重建。
     val resolvedHighlighter = highlighter ?: when (language) {
         EditorLanguage.Yaml -> remember { YamlHighlighter() }
+        EditorLanguage.JavaScript -> remember { JavaScriptHighlighter() }
         EditorLanguage.PlainText -> null
     }
     val highlightCache = remember(resolvedHighlighter, engine) { resolvedHighlighter?.let { HighlightCache(it) } }

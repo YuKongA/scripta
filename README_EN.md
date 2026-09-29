@@ -15,7 +15,7 @@ scripta does not wrap `BasicTextField`: the piece-tree text buffer, viewport-vir
 - **Long-line fast path** — in horizontal-scroll mode, printable-ASCII lines beyond 2 000 chars only measure the visible column window, with monospace-arithmetic geometry.
 - **Self-managed IME** — Android drives a custom `InputConnection` straight into the engine; desktop gives CJK input methods a live document view, with the candidate window anchored at the caret.
 - **Touch *and* desktop input as equals** — selection handles, drag magnifier, and pinch zoom on touch; full mouse and hardware-keyboard support on desktop — gated by *input type*, not platform.
-- **Incremental syntax highlighting** — a per-line plugin interface with cross-line state chaining; YAML built in, custom languages in ~50 lines.
+- **Incremental syntax highlighting** — a per-line plugin interface with cross-line state chaining; YAML and JavaScript built in, with support for custom language plugins.
 - **Pull-based host API** — a `@Stable` controller exposes snapshot state and imperative calls; no per-keystroke callbacks.
 
 ## Feature tour
@@ -176,7 +176,7 @@ class MyHighlighter : SyntaxHighlighter {
 CodeEditor(controller, highlighter = remember { MyHighlighter() })
 ```
 
-`remember` the instance — it keys the highlight and layout caches. Cross-line constructs travel through immutable `LineState` values. The built-in `YamlHighlighter` is the reference implementation.
+`remember` the instance — it keys the highlight and layout caches. Cross-line constructs travel through immutable `LineState` values. Built-in `YamlHighlighter` and `JavaScriptHighlighter` are available; select `EditorLanguage.JavaScript` to enable the latter.
 
 ## Theming
 

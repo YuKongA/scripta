@@ -12,6 +12,7 @@ enum class LineEnding { LF, CRLF }
 enum class EditorLanguage {
     PlainText,
     Yaml,
+    JavaScript,
 }
 
 /**

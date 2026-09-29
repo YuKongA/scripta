@@ -15,7 +15,7 @@ scripta 不是 `BasicTextField` 的包装：piece-tree 文本缓冲、视口虚�
 - **超长行快速路径** —— 横向滚动模式下，超过 2 000 字符的可打印 ASCII 行只测量可见列窗口、几何走等宽算术。
 - **自管 IME** —— Android 用自定义 `InputConnection` 直通引擎；桌面给 CJK 输入法实时文档视图，候选窗锚定光标。
 - **触屏与桌面输入都是一等公民** —— 触屏有选区手柄、拖拽放大镜、双指缩放；桌面有完整鼠标与硬件键盘支持——按*输入类型*而非平台区分。
-- **增量语法高亮** —— 逐行插件接口 + 跨行状态链；内置 YAML，自定义语言约 50 行。
+- **增量语法高亮** —— 逐行插件接口 + 跨行状态链；内置 YAML 和 JavaScript，支持自定义语言插件。
 - **拉取式宿主 API** —— `@Stable` 控制器暴露快照状态与命令式调用，没有逐键回调。
 
 ## 功能一览
@@ -176,7 +176,7 @@ class MyHighlighter : SyntaxHighlighter {
 CodeEditor(controller, highlighter = remember { MyHighlighter() })
 ```
 
-记得 `remember` 实例——它是高亮与版式缓存的键。跨行结构经不可变的 `LineState` 值在行间传递。内置的 `YamlHighlighter` 就是参考实现。
+记得 `remember` 实例——它是高亮与版式缓存的键。跨行结构经不可变的 `LineState` 值在行间传递。内置 `YamlHighlighter` 和 `JavaScriptHighlighter`；选择 `EditorLanguage.JavaScript` 即可启用后者。
 
 ## 主题
 
