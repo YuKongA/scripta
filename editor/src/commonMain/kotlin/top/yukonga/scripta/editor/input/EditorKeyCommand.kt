@@ -24,6 +24,9 @@ internal fun resolveCtrlBased(e: KeyEvent): EditorKeyCommand? {
     if (e.isAltPressed) return null
     val ctrl = e.isCtrlPressed
     return when (e.key) {
+        Key.Copy -> EditorKeyCommand.Copy
+        Key.Cut -> EditorKeyCommand.Cut
+        Key.Paste -> EditorKeyCommand.Paste
         Key.A -> if (ctrl) EditorKeyCommand.SelectAll else null
         Key.C -> if (ctrl) EditorKeyCommand.Copy else null
         Key.X -> if (ctrl) EditorKeyCommand.Cut else null
@@ -50,6 +53,9 @@ internal fun resolveMacBased(e: KeyEvent): EditorKeyCommand? {
     val cmd = e.isMetaPressed
     val opt = e.isAltPressed
     return when (e.key) {
+        Key.Copy -> EditorKeyCommand.Copy
+        Key.Cut -> EditorKeyCommand.Cut
+        Key.Paste -> EditorKeyCommand.Paste
         Key.A -> if (cmd) EditorKeyCommand.SelectAll else null
         Key.C -> if (cmd) EditorKeyCommand.Copy else null
         Key.X -> if (cmd) EditorKeyCommand.Cut else null
