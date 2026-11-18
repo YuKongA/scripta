@@ -1,5 +1,7 @@
 package top.yukonga.scripta.editor.input
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.text.InputType
 import android.text.TextUtils
 import android.view.KeyEvent
@@ -27,7 +29,7 @@ private const val EXTRACT_WINDOW = 2048
 
 /** 自管 IME 的 InputConnection：BaseInputConnection 子类，全部文本操作转发到 EditorEngine。 */
 internal class EditorInputConnection(
-    view: View,
+    private val view: View,
     private val engine: EditorEngine,
 ) : BaseInputConnection(view, /* fullEditor = */ false) {
 
@@ -71,6 +73,49 @@ internal class EditorInputConnection(
         engine.deleteSurroundingTextInCodePoints(beforeLength, afterLength); return true
     }
 
+    override fun setSelection(start: Int, end: Int): Boolean {
+        // 输入法「文本编辑」面板的选区定位 / 扩选：保留 anchor=start、head=end 的方向性
+        val total = engine.buffer.totalLength()
+        val a = engine.buffer.positionAt(start.coerceIn(0, total))
+        val b = engine.buffer.positionAt(end.coerceIn(0, total))
+        engine.setSelection(a, b)
+        return true
+    }
+
+    override fun performContextMenuAction(id: Int): Boolean {
+        // 输入法「文本编辑」面板的全选 / 复制 / 剪切 / 粘贴走此通道（或由下方 sendKeyEvent 转入）
+        val cm = view.context.getSystemService(ClipboardManager::class.java)
+        return when (id) {
+            android.R.id.selectAll -> {
+                engine.selectAll(); true
+            }
+
+            android.R.id.copy -> {
+                engine.selectedText()?.let { txt ->
+                    cm?.setPrimaryClip(ClipData.newPlainText(null, txt))
+                }
+                true
+            }
+
+            android.R.id.cut -> {
+                engine.selectedText()?.let { txt ->
+                    cm?.setPrimaryClip(ClipData.newPlainText(null, txt))
+                    engine.replaceSelection("")
+                }
+                true
+            }
+
+            android.R.id.paste, android.R.id.pasteAsPlainText -> {
+                val item = cm?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                val txt = (item?.text ?: item?.coerceToText(view.context))?.toString()
+                if (!txt.isNullOrEmpty()) engine.insert(txt)
+                true
+            }
+
+            else -> false
+        }
+    }
+
     override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = engine.textBeforeCursor(n)
     override fun getTextAfterCursor(n: Int, flags: Int): CharSequence = engine.textAfterCursor(n)
     override fun getSelectedText(flags: Int): CharSequence? = engine.selectedText()
@@ -101,7 +146,57 @@ internal class EditorInputConnection(
 
     override fun sendKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
+            val ctrl = event.isCtrlPressed || event.isMetaPressed
+            val extend = event.isShiftPressed
+            // 输入法「文本编辑」面板常经 sendKeyEvent 派发 Ctrl+A/C/X/V/Z/Y、专用 COPY/CUT/PASTE 键与方向键
+            if (ctrl && !event.isAltPressed) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_A -> return performContextMenuAction(android.R.id.selectAll)
+                    KeyEvent.KEYCODE_C -> return performContextMenuAction(android.R.id.copy)
+                    KeyEvent.KEYCODE_X -> return performContextMenuAction(android.R.id.cut)
+                    KeyEvent.KEYCODE_V -> return performContextMenuAction(android.R.id.paste)
+                    KeyEvent.KEYCODE_Z -> {
+                        if (extend) engine.redo() else engine.undo(); return true
+                    }
+
+                    KeyEvent.KEYCODE_Y -> {
+                        engine.redo(); return true
+                    }
+                }
+            }
             when (event.keyCode) {
+                KeyEvent.KEYCODE_COPY -> return performContextMenuAction(android.R.id.copy)
+                KeyEvent.KEYCODE_CUT -> return performContextMenuAction(android.R.id.cut)
+                KeyEvent.KEYCODE_PASTE -> return performContextMenuAction(android.R.id.paste)
+
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    if (ctrl) engine.moveCaretByWord(-1, extend) else engine.moveCaretHorizontally(-1, extend)
+                    return true
+                }
+
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    if (ctrl) engine.moveCaretByWord(1, extend) else engine.moveCaretHorizontally(1, extend)
+                    return true
+                }
+
+                KeyEvent.KEYCODE_DPAD_UP -> {
+                    engine.moveCaretVertically(-1, extend); return true
+                }
+
+                KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    engine.moveCaretVertically(1, extend); return true
+                }
+
+                KeyEvent.KEYCODE_MOVE_HOME -> {
+                    if (ctrl) engine.moveCaretToDocStart(extend) else engine.moveCaretToLineStart(extend)
+                    return true
+                }
+
+                KeyEvent.KEYCODE_MOVE_END -> {
+                    if (ctrl) engine.moveCaretToDocEnd(extend) else engine.moveCaretToLineEnd(extend)
+                    return true
+                }
+
                 KeyEvent.KEYCODE_DEL -> {
                     engine.backspace(); return true
                 }
@@ -110,11 +205,13 @@ internal class EditorInputConnection(
                     engine.deleteForward(); return true
                 }
 
-                KeyEvent.KEYCODE_ENTER -> {
+                KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> {
                     engine.insertNewlineAutoIndent(); return true
                 }
 
-                else -> {
+                else -> if (!ctrl && !event.isAltPressed) {
+                    // 挡住带 Ctrl/Meta/Alt 的组合键：Android 上 Ctrl+C 等事件的 unicodeChar 仍可能是 'c'，
+                    // 若落入键入分支会把选区误替换成字符
                     val ch = event.unicodeChar
                     if (ch != 0) {
                         engine.typeCharacter(String(Character.toChars(ch))); return true // 键入原语：带自动配对
