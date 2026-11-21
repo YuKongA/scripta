@@ -1,5 +1,9 @@
 package top.yukonga.scripta.editor.find
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.selectAll
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.foundation.text.input.setTextAndSelectAll
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,8 +31,20 @@ class FindSession internal constructor(private val engine: EditorEngine) {
     var replaceVisible: Boolean by mutableStateOf(false)
         private set
 
-    var query: String by mutableStateOf("")
-    var replacement: String by mutableStateOf("")
+    internal val queryState: TextFieldState = TextFieldState()
+    internal val replacementState: TextFieldState = TextFieldState()
+
+    var query: String
+        get() = queryState.text.toString()
+        set(value) {
+            queryState.setTextAndPlaceCursorAtEnd(value)
+        }
+
+    var replacement: String
+        get() = replacementState.text.toString()
+        set(value) {
+            replacementState.setTextAndPlaceCursorAtEnd(value)
+        }
     var caseSensitive: Boolean by mutableStateOf(false)
     var wholeWord: Boolean by mutableStateOf(false)
     var useRegex: Boolean by mutableStateOf(false)
@@ -45,9 +61,13 @@ class FindSession internal constructor(private val engine: EditorEngine) {
         visible = true
         // 两种模式互斥：纯查找不提供替换能力，打开时收起已展开的替换行。
         replaceVisible = withReplace
-        // 有单行选区时以选中文本预填查询（多行选区不预填——查询框是单行语义）。
+        // 有单行选区时以选中文本预填查询（多行选区不预填——查询框是单行语义），并全选方便直接覆盖或复用。
         val selected = engine.selectedText()
-        if (!selected.isNullOrEmpty() && !selected.contains('\n')) query = selected
+        if (!selected.isNullOrEmpty() && !selected.contains('\n')) {
+            queryState.setTextAndSelectAll(selected)
+        } else {
+            queryState.edit { selectAll() }
+        }
     }
 
     fun close() {

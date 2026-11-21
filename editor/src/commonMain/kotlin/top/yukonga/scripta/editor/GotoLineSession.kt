@@ -1,5 +1,8 @@
 package top.yukonga.scripta.editor
 
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
+import androidx.compose.foundation.text.input.setTextAndSelectAll
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,10 +20,16 @@ class GotoLineSession internal constructor(private val engine: EditorEngine) {
     var visible: Boolean by mutableStateOf(false)
         private set
 
-    var input: String by mutableStateOf("")
+    internal val inputState: TextFieldState = TextFieldState()
+
+    var input: String
+        get() = inputState.text.toString()
+        set(value) {
+            inputState.setTextAndPlaceCursorAtEnd(value)
+        }
 
     fun open() {
-        input = (engine.caret.line + 1).toString()
+        inputState.setTextAndSelectAll((engine.caret.line + 1).toString())
         visible = true
     }
 

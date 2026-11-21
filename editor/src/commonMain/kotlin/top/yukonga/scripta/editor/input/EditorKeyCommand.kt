@@ -66,6 +66,7 @@ internal fun resolveMacBased(e: KeyEvent): EditorKeyCommand? {
             cmd -> EditorKeyCommand.Find
             else -> null
         }
+
         Key.G -> if (cmd) (if (e.isShiftPressed) EditorKeyCommand.FindPrev else EditorKeyCommand.FindNext) else null
         Key.L -> if (cmd) EditorKeyCommand.GotoLine else null
         Key.Slash -> if (cmd) EditorKeyCommand.ToggleComment else null
@@ -74,11 +75,13 @@ internal fun resolveMacBased(e: KeyEvent): EditorKeyCommand? {
             cmd -> EditorKeyCommand.LineStart
             else -> null
         }
+
         Key.DirectionRight -> when {
             opt -> EditorKeyCommand.WordRight
             cmd -> EditorKeyCommand.LineEnd
             else -> null
         }
+
         Key.DirectionUp -> if (cmd) EditorKeyCommand.DocStart else null
         Key.DirectionDown -> if (cmd) EditorKeyCommand.DocEnd else null
         Key.MoveHome -> EditorKeyCommand.DocStart

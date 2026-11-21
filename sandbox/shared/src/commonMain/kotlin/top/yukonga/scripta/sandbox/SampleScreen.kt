@@ -4,8 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlexBox
+import androidx.compose.foundation.layout.FlexWrap
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -78,7 +78,6 @@ private val CustomEditorColors = EditorColors(
     ),
 )
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SampleScreen(modifier: Modifier = Modifier) {
     // saveable 版：旋转/进程死亡后文本、选区、脏标记自动恢复（超大文档自动跳过 instance state）。
@@ -143,8 +142,11 @@ fun SampleScreen(modifier: Modifier = Modifier) {
                 )
                 .padding(8.dp)
         ) {
-            // 第一行：文档 / 视图开关（FlowRow 兜底折行，防超窄屏溢出）。
-            FlowRow(Modifier.fillMaxWidth()) {
+            // 第一行：文档 / 视图开关（FlexBox 兜底折行，防超窄屏溢出）。
+            FlexBox(
+                modifier = Modifier.fillMaxWidth(),
+                config = { wrap(FlexWrap.Wrap) },
+            ) {
                 BasicText(
                     text = "  打开  ",
                     style = TextStyle(color = cOpen, fontSize = 13.sp),

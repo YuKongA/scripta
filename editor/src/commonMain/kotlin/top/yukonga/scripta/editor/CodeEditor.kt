@@ -33,6 +33,7 @@ import androidx.compose.foundation.overscroll
 import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.computedStateOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -487,11 +488,12 @@ fun CodeEditor(
     fun pageLines(): Int = ((viewportHeight / lineHeightPx).toInt() - 1).coerceAtLeast(1)
 
     // 量化滚动：组合只订阅「首个可见行」，跨行才重组；同一行内的滚动仅由 EditorCanvas 在 draw 阶段读
-    // 像素级 scrollY/scrollX 平滑重绘，不再每滚 1px 全量重组。derivedStateOf 仅在整数结果变化时通知读者。
-    // lineCount 必须作 key：derivedStateOf 的 lineAtPx 闭包捕获 lineCount 做 coerceIn 上界，行数变化（尤其
+    // 像素级 scrollY/scrollX 平滑重绘，不再每滚 1px 全量重组。computedStateOf 仅在整数结果变化时通知读者，
+    // 且不维护 derivedStateOf 缓存/应用监听，适合 scrollY 逐帧变更的轻量行号换算。
+    // lineCount 必须作 key：computedStateOf 的 lineAtPx 闭包捕获 lineCount 做 coerceIn 上界，行数变化（尤其
     // 初始 setText 把 1→N）时须重建闭包，否则捕获旧上界（如 1）会把 scrollLine 永远钳到 0、预测量窗口不前移，
     // 靠下的长/网格行不计入 widestSeen、横向滚动范围被卡死（不换行模式下 rowIndex 恒定、不再连带触发重建）。
-    val scrollLine by remember(rowIndex, lineHeightPx, softWrap, lineCount) { derivedStateOf { lineAtPx(scrollY) } }
+    val scrollLine by remember(rowIndex, lineHeightPx, softWrap, lineCount) { computedStateOf { lineAtPx(scrollY) } }
 
     // 预测量可见窗口（组合阶段填充缓存 + 行索引），并求不换行下最宽行以定横向滚动范围。
     val firstVisibleLine = (scrollLine - 3).coerceAtLeast(0)
@@ -1774,7 +1776,6 @@ fun CodeEditor(
                 charW = charWpx,
                 isGridLine = ::isGridLine,
                 gridRefBaseline = gridRefBaseline,
-                gridRefCursorTop = gridRefCursor.top,
                 gridRefCursorBottom = gridRefCursor.bottom,
                 // 查找命中高亮（draw 阶段读 session 的行索引表与当前命中下标，重算即重绘、不重组）。
                 findSpansForLine = findSession::spansForLine,

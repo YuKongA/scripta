@@ -387,7 +387,7 @@ class EditorEngine(initialText: String = "") {
         val openAt = buffer.offsetAt(TextPosition(first, i))
         val closeEnd = buffer.offsetAt(TextPosition(last, j))
         val wrapped = firstText.startsWith(open, i) && lastText.substring(0, j).endsWith(close) &&
-            closeEnd - close.length >= openAt + open.length
+                closeEnd - close.length >= openAt + open.length
         if (wrapped) {
             var openEnd = i + open.length
             if (openEnd < firstText.length && firstText[openEnd] == ' ') openEnd++

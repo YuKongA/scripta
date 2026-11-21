@@ -164,11 +164,13 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                         i = end
                         segmentStart = i
                     }
+
                     quote -> {
                         i++
                         span(segmentStart, i, TokenType.String)
                         return
                     }
+
                     else -> i++
                 }
             }
@@ -190,6 +192,7 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                         i = end
                         segmentStart = i
                     }
+
                     text.startsWith("${'$'}{", i) -> {
                         span(segmentStart, i, TokenType.String)
                         span(i, i + 2, TokenType.Punctuation)
@@ -197,6 +200,7 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                         frames.add(Context.Code(Frame.Code(interpolation = true, statementStart = false)))
                         return
                     }
+
                     text[i] == '`' -> {
                         i++
                         span(segmentStart, i, TokenType.String)
@@ -204,6 +208,7 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                         valueEnded(frames.last() as Context.Code)
                         return
                     }
+
                     else -> i++
                 }
             }
@@ -217,8 +222,14 @@ class JavaScriptHighlighter : SyntaxHighlighter {
             while (j < text.length) {
                 when (text[j]) {
                     '\\' -> j = (j + 2).coerceAtMost(text.length)
-                    '[' -> { inClass = true; j++ }
-                    ']' -> { inClass = false; j++ }
+                    '[' -> {
+                        inClass = true; j++
+                    }
+
+                    ']' -> {
+                        inClass = false; j++
+                    }
+
                     '/' -> {
                         if (inClass) {
                             j++
@@ -230,6 +241,7 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                             return true
                         }
                     }
+
                     else -> j++
                 }
             }
@@ -316,17 +328,20 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                     code.expressionAllowed = true
                     code.statementStart = false
                 }
+
                 ')' -> {
                     val control = if (code.parens.isEmpty()) false else code.parens.removeAt(code.parens.lastIndex)
                     code.expressionAllowed = control
                     code.statementStart = control
                 }
+
                 '{' -> {
                     val block = code.statementStart || code.afterArrow || !code.expressionAllowed
                     code.braces.add(block)
                     code.expressionAllowed = true
                     code.statementStart = block
                 }
+
                 '}' -> {
                     if (code.interpolation && code.braces.isEmpty()) {
                         span(start, i, TokenType.Punctuation)
@@ -337,29 +352,34 @@ class JavaScriptHighlighter : SyntaxHighlighter {
                     code.expressionAllowed = block
                     code.statementStart = block
                 }
+
                 '[' -> {
                     code.expressionAllowed = true
                     code.statementStart = false
                 }
+
                 ']' -> valueEnded(code)
                 ';' -> {
                     code.expressionAllowed = true
                     code.statementStart = true
                 }
+
                 ',', ':' -> {
                     code.expressionAllowed = true
                     code.statementStart = false
                 }
+
                 '.' -> {
                     if (text.startsWith("..", i)) i += 2
                     else code.afterMember = true
                     code.expressionAllowed = !code.afterMember
                     code.statementStart = false
                 }
+
                 else -> {
                     val operator = OPERATORS.firstOrNull { token ->
                         text.startsWith(token, start) &&
-                            (token != "?." || start + 2 >= text.length || !text[start + 2].isDigit())
+                                (token != "?." || start + 2 >= text.length || !text[start + 2].isDigit())
                     } ?: c.toString()
                     i = start + operator.length
                     when (operator) {

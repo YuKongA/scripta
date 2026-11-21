@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.computedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -152,7 +152,6 @@ fun EditorCanvas(
     charW: Float,
     isGridLine: (Int) -> Boolean,
     gridRefBaseline: Float,
-    gridRefCursorTop: Float,
     gridRefCursorBottom: Float,
     findSpansForLine: (Int) -> List<FindSpan> = { emptyList() },
     activeFindIndex: () -> Int = { -1 },
@@ -181,6 +180,7 @@ fun EditorCanvas(
     val caretTeardrop = remember(handleRadiusPx) { buildTeardropPath(0f, 0f, 0f, 1f, handleRadiusPx, handleRadiusPx * 1.4f) }
     val startTeardrop = remember(handleRadiusPx) { buildTeardropPath(0f, 0f, -diag, diag, handleRadiusPx, handleRadiusPx * 1.4f) }
     val endTeardrop = remember(handleRadiusPx) { buildTeardropPath(0f, 0f, diag, diag, handleRadiusPx, handleRadiusPx * 1.4f) }
+    val deferredNumbers = remember { DeferredLineNumbers() }
     Canvas(modifier) {
         // 在 draw 阶段读取滚动量：滚动只触发本画布重绘，不再让上层每滚 1px 重组。
         val sX = scrollX()
@@ -206,8 +206,9 @@ fun EditorCanvas(
         // 背景铺满整视口，**不参与缩放**——否则缩小预览时缩过的背景盖不满视口、露出上一帧/黑边。
         drawRect(colors.background, topLeft = Offset.Zero, size = size)
 
-        // 逐行收集的行号（行, 预缩放屏幕顶 y）：正文块填充、gutter 块绘制（两块横向变换不同，故提到块外共享）。
-        val deferredNumbers = ArrayList<Pair<Int, Float>>()
+        // 逐行收集的行号（行, 预缩放屏幕顶 y）：复用原始数组缓冲，滚动/闪烁帧零装箱零分配。
+        deferredNumbers.clear()
+        val matchedBrackets = bracketMatch()
 
         // 正文/选区/预编辑/手柄：横向绕焦点（hTranslateText）+ 纵向绕焦点（vTranslate）→ screenX=s·px+hTranslateText、
         // screenY=s·py+vTranslate。放大时焦点左侧正文左移滑到 gutter 后、上方内容上移、焦点处停在指下。scale==1 且两平移=0 时恒等。
@@ -218,7 +219,7 @@ fun EditorCanvas(
             val lineCount = engine.buffer.lineCount
 
             fun drawLineNumber(line: Int, top: Float) {
-                deferredNumbers.add(line to top)
+                deferredNumbers.add(line, top)
             }
 
             var line = firstVisibleLine(preTop).coerceIn(0, (lineCount - 1).coerceAtLeast(0))
@@ -250,7 +251,7 @@ fun EditorCanvas(
                             }
                         }
                         // 匹配括号底色：网格行同走等宽算术（单字符格）。
-                        bracketMatch()?.let { bm ->
+                        matchedBrackets?.let { bm ->
                             if (bm.open.line == line && bm.open.column < lineLen) {
                                 drawRect(colors.bracketMatch, topLeft = Offset(textX + bm.open.column * charW, top), size = Size(charW, h))
                             }
@@ -331,7 +332,7 @@ fun EditorCanvas(
                         }
                     }
                     // 匹配括号底色：单字符 range path，与查找同式（softWrap 折行几何由 layout 兜住）。
-                    bracketMatch()?.let { bm ->
+                    matchedBrackets?.let { bm ->
                         val lineLen = engine.buffer.lineLength(line)
                         fun drawBracketAt(col: Int) {
                             if (col < lineLen) {
@@ -445,7 +446,9 @@ fun EditorCanvas(
         val gutterHTranslate = if (pinnedToScreen) 0f else hTranslateText
         withTransform({ translate(gutterHTranslate, vTranslate); scale(s, s, Offset.Zero) }) {
             drawRect(colors.gutterBackground, topLeft = Offset(-gutterScroll, preTop), size = Size(gutterWidthPx, preBottom - preTop))
-            for ((line, top) in deferredNumbers) {
+            for (i in 0 until deferredNumbers.count) {
+                val line = deferredNumbers.lines[i]
+                val top = deferredNumbers.tops[i]
                 val num = numberLayoutCache.getOrPut(line) { textMeasurer.measure((line + 1).toString(), numberStyle) }
                 val numTop = top + (refBaselinePx - num.firstBaseline)
                 drawText(
@@ -526,6 +529,32 @@ private val MAGNIFIER_GAP = 22.dp      // 胶囊底与光标顶的间距（浮�
 private val MAGNIFIER_MARGIN = 8.dp    // 窗口边缘留白（胶囊贴边钳住不出界，含上浮到窗口顶时）
 private val MAGNIFIER_POPUP_PAD = 30.dp // 胶囊四周留白：须 ≥ 悬浮投影的模糊+下沉 falloff，否则淡入淡出时投影软边被最外 alpha 层的离屏缓冲硬裁
 private val MAGNIFIER_BORDER = 1.dp
+private val MAGNIFIER_SHAPE = RoundedCornerShape(percent = 50)
+
+private class DeferredLineNumbers {
+    var count = 0
+        private set
+    var lines = IntArray(64)
+        private set
+    var tops = FloatArray(64)
+        private set
+
+    fun clear() {
+        count = 0
+    }
+
+    fun add(line: Int, top: Float) {
+        if (count == lines.size) {
+            val newCap = lines.size * 2
+            lines = lines.copyOf(newCap)
+            tops = tops.copyOf(newCap)
+        }
+        lines[count] = line
+        tops[count] = top
+        count++
+    }
+}
+
 private const val MAGNIFIER_SCALE = 1.4f
 
 // 悬浮投影（真·dropShadow，画在玻璃层之下）：比旧的画在玻璃内的小阴影更大更柔更沉 → 放大镜浮得更高、更像悬空水珠。
@@ -612,9 +641,9 @@ fun MagnifierOverlay(
         animationSpec = tween(durationMillis = if (showing) 160 else 260),
         label = "magnifierAlpha",
     )
-    // Popup 存在与否：alpha>~0（可见或淡出中）才挂 Popup。用 derivedStateOf 只在阈值翻转时重组（非逐帧）；淡出的渐隐由内容
-    // graphicsLayer 的 alpha 完成，alpha≈0 时才撤 Popup。
-    val visible by remember { derivedStateOf { alpha.value > 0.001f } }
+    // Popup 存在与否：alpha>~0（可见或淡出中）才挂 Popup。用 computedStateOf 只在阈值翻转时重组（非逐帧），
+    // 且省去 derivedStateOf 的缓存与快照失效开销；淡出的渐隐由内容 graphicsLayer 的 alpha 完成，alpha≈0 时才撤 Popup。
+    val visible by remember { computedStateOf { alpha.value > 0.001f } }
     // 最后一帧的连续参考点 [x,y]（普通 remember、非快照——写不触发重组/重绘）。松手后 dragPos 置空时用它 → 胶囊留在原位淡出，
     // 而非回落到吸附后的最终光标位置再淡出。NaN 表示尚无有效值（回落到光标）。
     val lastRef = remember { floatArrayOf(Float.NaN, Float.NaN) }
@@ -635,6 +664,17 @@ fun MagnifierOverlay(
                 depthEffect = MAGNIFIER_DEPTH_EFFECT,
                 chromaticAberration = MAGNIFIER_DISPERSION,
             )
+        }
+    }
+    val loupeClipPath = remember(density) {
+        with(density) {
+            val pad = MAGNIFIER_POPUP_PAD.toPx()
+            val wl = MAGNIFIER_WIDTH.toPx()
+            val hl = MAGNIFIER_HEIGHT.toPx()
+            val radius = hl / 2f
+            Path().apply {
+                addRoundRect(RoundRect(Rect(pad, pad, pad + wl, pad + hl), CornerRadius(radius, radius)))
+            }
         }
     }
 
@@ -721,7 +761,7 @@ fun MagnifierOverlay(
                             .offset(MAGNIFIER_POPUP_PAD, MAGNIFIER_POPUP_PAD)
                             .size(MAGNIFIER_WIDTH, MAGNIFIER_HEIGHT)
                             .dropShadow(
-                                shape = RoundedCornerShape(percent = 50),
+                                shape = MAGNIFIER_SHAPE,
                                 shadow = Shadow(
                                     radius = MAGNIFIER_DROP_RADIUS,
                                     spread = 0.dp,
@@ -749,8 +789,7 @@ fun MagnifierOverlay(
                         val loupeRect = Rect(pad, pad, pad + wl, pad + hl) // Popup 内容局部坐标（胶囊固定于此、玻璃 uniform 与之对齐）
 
                         // 悬浮投影不在此画：已移到玻璃层【之下】的真·dropShadow（见 Popup 内容第 ① 层），更大更柔、浮得更高。
-                        val clip = Path().apply { addRoundRect(RoundRect(loupeRect, CornerRadius(radius, radius))) }
-                        clipPath(clip) {
+                        clipPath(loupeClipPath) {
                             drawRect(colors.background, topLeft = loupeRect.topLeft, size = loupeRect.size)
                             // 放大变换：编辑器局部内容点 (ex,ey) → Popup 内胶囊中心 (pad+wl/2, pad+hl/2)，绕连续参考点 (refX,refY) 放大 m。
                             withTransform({
@@ -869,7 +908,7 @@ fun MagnifierOverlay(
                             .offset(MAGNIFIER_POPUP_PAD, MAGNIFIER_POPUP_PAD)
                             .size(MAGNIFIER_WIDTH, MAGNIFIER_HEIGHT)
                             .innerShadow(
-                                shape = RoundedCornerShape(percent = 50),
+                                shape = MAGNIFIER_SHAPE,
                                 shadow = Shadow(
                                     radius = 14.dp,
                                     spread = 0.dp,

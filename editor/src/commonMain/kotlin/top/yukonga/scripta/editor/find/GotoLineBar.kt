@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldBuffer
+import androidx.compose.foundation.text.input.delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -24,6 +27,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.scripta.editor.EditorColors
 import top.yukonga.scripta.editor.GotoLineSession
+
+private object DigitsOnlyInputTransformation : InputTransformation {
+    override fun TextFieldBuffer.transformInput() {
+        for (i in length - 1 downTo 0) {
+            if (!charAt(i).isDigit()) delete(i, i + 1)
+        }
+    }
+}
 
 /**
  * 停靠式跳转行号条：与查找条同族——嵌在编辑器根 Column 顶部、占布局行，不用 focusable Popup
@@ -57,8 +68,7 @@ internal fun GotoLineBar(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         FindField(
-            value = session.input,
-            onValueChange = { session.input = it.filter(Char::isDigit) },
+            state = session.inputState,
             placeholder = "跳转到行",
             colors = colors,
             modifier = Modifier
@@ -79,11 +89,15 @@ internal fun GotoLineBar(
                     }
                 },
             keyboardType = KeyboardType.Number,
+            inputTransformation = DigitsOnlyInputTransformation,
             onImeSearch = { jumpAndRefocus() },
         )
+        val counterStyle = remember(colors.symbolBarForeground) {
+            TextStyle(color = colors.symbolBarForeground.copy(alpha = 0.75f), fontSize = 12.sp)
+        }
         BasicText(
             text = "共 $lineCount 行",
-            style = TextStyle(color = colors.symbolBarForeground.copy(alpha = 0.75f), fontSize = 12.sp),
+            style = counterStyle,
             maxLines = 1,
         )
         ActionChip("跳转", colors) { jumpAndRefocus() }

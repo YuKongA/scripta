@@ -32,6 +32,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
+private val SYMBOL_KEY_SHAPE = RoundedCornerShape(6.dp)
+
 /**
  * 底部符号条上的一个键。[label] 为显示文字，[value] 为插入到文档的实际文本（默认与 [label] 相同）。
  * 二者分离是为了让「Tab」这类键显示短名却插入不同内容（如 4 个空格），并允许调用方完全自定义两者。
@@ -76,6 +78,9 @@ internal fun SymbolBar(
     modifier: Modifier = Modifier,
 ) {
     val divider = colors.symbolBarForeground.copy(alpha = 0.12f)
+    val keyTextStyle = remember(colors.symbolBarForeground) {
+        TextStyle(color = colors.symbolBarForeground, fontSize = 15.sp, fontFamily = FontFamily.Monospace)
+    }
     Row(
         modifier
             .fillMaxWidth()
@@ -87,21 +92,22 @@ internal fun SymbolBar(
         horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        symbols.forEach { symbol -> SymbolKey(symbol, colors, onSymbol) }
+        symbols.forEach { symbol -> SymbolKey(symbol, colors.symbolBarPressed, keyTextStyle, onSymbol) }
     }
 }
 
 @Composable
 private fun SymbolKey(
     symbol: EditorSymbol,
-    colors: EditorColors,
+    pressedColor: Color,
+    textStyle: TextStyle,
     onSymbol: (EditorSymbol) -> Unit,
 ) {
     var pressed by remember { mutableStateOf(false) }
     Box(
         Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (pressed) colors.symbolBarPressed else Color.Transparent)
+            .clip(SYMBOL_KEY_SHAPE)
+            .drawBehind { if (pressed) drawRect(pressedColor) }
             .pointerInput(symbol) {
                 detectTapGestures(
                     onPress = {
@@ -118,7 +124,7 @@ private fun SymbolKey(
     ) {
         BasicText(
             text = symbol.label,
-            style = TextStyle(color = colors.symbolBarForeground, fontSize = 15.sp, fontFamily = FontFamily.Monospace),
+            style = textStyle,
         )
     }
 }

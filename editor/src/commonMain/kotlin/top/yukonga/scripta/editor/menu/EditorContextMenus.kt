@@ -24,17 +24,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -50,7 +51,14 @@ import kotlin.math.roundToInt
 
 private val MENU_GAP = 10.dp     // 悬浮条与选区/光标之间的竖直间距
 private val MENU_MARGIN = 8.dp   // 菜单贴窗口边缘的留白（钳制用）
-private val MENU_CORNER = 8.dp
+private val TOOLBAR_SHAPE = RoundedCornerShape(8.dp)
+private val TOOLBAR_BUTTON_SHAPE = RoundedCornerShape(6.dp)
+private val CONTEXT_MENU_SHAPE = RoundedCornerShape(6.dp)
+private val CONTEXT_MENU_ACTIONS = listOf(
+    EditorContextAction.Undo, EditorContextAction.Redo,
+    EditorContextAction.Cut, EditorContextAction.Copy,
+    EditorContextAction.Paste, EditorContextAction.SelectAll,
+)
 
 /** 菜单外围的小外阴影（Compose 新 [dropShadow]）：浮层与正文分层、有立体感。放在 clip/background 之前 → 画在形状之外。 */
 private fun Modifier.menuShadow(shape: Shape): Modifier = dropShadow(
@@ -139,30 +147,34 @@ internal fun SelectionActionToolbar(
     }
 
     Popup(popupPositionProvider = provider, properties = PopupProperties(focusable = false)) {
+        val buttonStyle = remember(colors.symbolBarForeground) {
+            TextStyle(color = colors.symbolBarForeground, fontSize = 15.sp)
+        }
         Row(
             Modifier
-                .menuShadow(RoundedCornerShape(MENU_CORNER))
-                .clip(RoundedCornerShape(MENU_CORNER))
+                .menuShadow(TOOLBAR_SHAPE)
+                .clip(TOOLBAR_SHAPE)
                 .background(colors.symbolBarBackground)
                 .padding(horizontal = 4.dp, vertical = 3.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             actions.forEach { action ->
-                ToolbarButton(label = action.zhLabel, colors = colors) { onPerform(action) }
+                ToolbarButton(label = action.zhLabel, pressedColor = colors.symbolBarPressed, textStyle = buttonStyle) {
+                    onPerform(action)
+                }
             }
         }
     }
 }
 
 @Composable
-private fun ToolbarButton(label: String, colors: EditorColors, onClick: () -> Unit) {
+private fun ToolbarButton(label: String, pressedColor: Color, textStyle: TextStyle, onClick: () -> Unit) {
     var pressed by remember { mutableStateOf(false) }
     Box(
         Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(if (pressed) colors.symbolBarPressed else Color.Transparent)
-            // 与底部符号条同法：detectTapGestures 落点、不抢焦点 → 点操作不销毁 IME 会话、不收键盘。
+            .clip(TOOLBAR_BUTTON_SHAPE)
+            .drawBehind { if (pressed) drawRect(pressedColor) }
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {
@@ -177,7 +189,7 @@ private fun ToolbarButton(label: String, colors: EditorColors, onClick: () -> Un
             .padding(horizontal = 12.dp, vertical = 8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(text = label, style = TextStyle(color = colors.symbolBarForeground, fontSize = 15.sp))
+        BasicText(text = label, style = textStyle)
     }
 }
 
@@ -232,17 +244,13 @@ internal fun EditorContextMenu(
     ) {
         Column(
             Modifier
-                .menuShadow(RoundedCornerShape(6.dp))
-                .clip(RoundedCornerShape(6.dp))
+                .menuShadow(CONTEXT_MENU_SHAPE)
+                .clip(CONTEXT_MENU_SHAPE)
                 .background(colors.symbolBarBackground)
                 .padding(vertical = 4.dp)
                 .width(IntrinsicSize.Max),
         ) {
-            listOf(
-                EditorContextAction.Undo, EditorContextAction.Redo,
-                EditorContextAction.Cut, EditorContextAction.Copy,
-                EditorContextAction.Paste, EditorContextAction.SelectAll,
-            ).forEach { action ->
+            CONTEXT_MENU_ACTIONS.forEach { action ->
                 ContextMenuRow(
                     label = action.zhLabel,
                     enabled = availability.isAvailable(action),
@@ -268,18 +276,18 @@ private fun ContextMenuRow(label: String, enabled: Boolean, colors: EditorColors
                     Modifier
                 }
             )
-            .background(if (hovered && enabled) colors.symbolBarPressed else Color.Transparent)
+            .drawBehind { if (hovered && enabled) drawRect(colors.symbolBarPressed) }
             .defaultMinSize(minWidth = 132.dp, minHeight = 32.dp)
             .padding(horizontal = 14.dp, vertical = 7.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
-        BasicText(
-            text = label,
-            style = TextStyle(
+        val rowStyle = remember(colors.symbolBarForeground, enabled) {
+            TextStyle(
                 color = colors.symbolBarForeground.copy(alpha = if (enabled) 1f else 0.38f),
                 fontSize = 14.sp,
                 textAlign = TextAlign.Start,
-            ),
-        )
+            )
+        }
+        BasicText(text = label, style = rowStyle)
     }
 }

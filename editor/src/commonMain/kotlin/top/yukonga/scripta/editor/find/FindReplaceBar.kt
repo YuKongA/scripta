@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.input.InputTransformation
+import androidx.compose.foundation.text.input.TextFieldLineLimits
+import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
@@ -35,17 +38,17 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import top.yukonga.scripta.editor.EditorColors
 import top.yukonga.scripta.editor.editorNoFontPaddingStyle
+
+private val BAR_CHIP_SHAPE = RoundedCornerShape(4.dp)
 
 /**
  * 停靠式查找 / 替换条：嵌在编辑器根 Column 顶部、占自己的布局行——**不是** Popup 浮层。
@@ -78,8 +81,7 @@ internal fun FindReplaceBar(
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             FindField(
-                value = session.query,
-                onValueChange = { session.query = it },
+                state = session.queryState,
                 placeholder = "查找",
                 colors = colors,
                 // 弹性宽度：固定尺寸的计数/开关/按钮先占位，输入框吸收剩余宽度——窄屏（或大字体缩放）
@@ -103,9 +105,12 @@ internal fun FindReplaceBar(
                     },
                 onImeSearch = { session.next() },
             )
+            val counterStyle = remember(colors.symbolBarForeground) {
+                TextStyle(color = colors.symbolBarForeground.copy(alpha = 0.75f), fontSize = 12.sp)
+            }
             BasicText(
                 text = counterText(session),
-                style = TextStyle(color = colors.symbolBarForeground.copy(alpha = 0.75f), fontSize = 12.sp),
+                style = counterStyle,
                 maxLines = 1,
             )
             ToggleChip("Aa", session.caseSensitive, colors) { session.caseSensitive = it }
@@ -118,8 +123,7 @@ internal fun FindReplaceBar(
         if (session.replaceVisible && !readOnly) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 FindField(
-                    value = session.replacement,
-                    onValueChange = { session.replacement = it },
+                    state = session.replacementState,
                     placeholder = "替换为",
                     colors = colors,
                     // 与查询框同理：弹性宽度，替换按钮恒可见。
@@ -160,22 +164,14 @@ private fun counterText(session: FindSession): String = when {
 
 @Composable
 internal fun FindField(
-    value: String,
-    onValueChange: (String) -> Unit,
+    state: TextFieldState,
     placeholder: String,
     colors: EditorColors,
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
+    inputTransformation: InputTransformation? = null,
     onImeSearch: () -> Unit,
 ) {
-    // 选区归字段内部管，文本与外部 String 同步。挂载初值全选：查找条关闭重开（字段重挂载）时
-    // 上次的查询词处于全选态——直接输入即覆盖、直接 Enter 即复用。
-    var fieldValue by remember { mutableStateOf(TextFieldValue(value, TextRange(0, value.length))) }
-    if (fieldValue.text != value) {
-        // 外部改写文本（打开时按选区预填等）：同步并全选，语义同重开。用户键入不走这里
-        //（onValueChange 已把外部值改成一致）。
-        fieldValue = TextFieldValue(value, TextRange(0, value.length))
-    }
     // 固定行高 + Trim.None 单行也生效 + 居中 + Android 关 includeFontPadding：CJK 回退字体垂直度量
     // 大于 Latin，不固定行高时输入中文会让字段行盒长高、整个输入框跳高（正文行高同一问题、同一修法）。
     // 占位符共用此样式——占位符本身是中文，否则空态（CJK 高）与输入英文（Latin 高）之间也会跳。
@@ -183,49 +179,58 @@ internal fun FindField(
         LineHeightStyle(alignment = LineHeightStyle.Alignment.Center, trim = LineHeightStyle.Trim.None)
     }
     val fieldPlatformStyle = remember { editorNoFontPaddingStyle() }
-    Box(
-        modifier
-            // 宽度交给调用方（Row 内 weight 弹性分配），只兜一个可点/可读的下限。
-            .widthIn(min = 72.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(colors.background.copy(alpha = 0.6f))
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        if (value.isEmpty()) {
-            BasicText(
-                text = placeholder,
-                style = TextStyle(
-                    color = colors.symbolBarForeground.copy(alpha = 0.45f),
-                    fontSize = 13.sp,
-                    lineHeight = 20.sp,
-                    lineHeightStyle = fieldLineStyle,
-                    platformStyle = fieldPlatformStyle,
-                ),
-            )
-        }
-        BasicTextField(
-            value = fieldValue,
-            onValueChange = {
-                fieldValue = it
-                if (it.text != value) onValueChange(it.text)
-            },
-            singleLine = true,
-            textStyle = TextStyle(
-                color = colors.foreground,
-                fontSize = 13.sp,
-                fontFamily = FontFamily.Monospace,
-                lineHeight = 20.sp,
-                lineHeightStyle = fieldLineStyle,
-                platformStyle = fieldPlatformStyle,
-            ),
-            cursorBrush = SolidColor(colors.cursor),
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search, keyboardType = keyboardType),
-            keyboardActions = KeyboardActions(onSearch = { onImeSearch() }),
-            // 撑满外框：空文本的字段本身只有光标宽，点框内空白必须也能聚焦。
-            modifier = Modifier.fillMaxWidth(),
+    val placeholderStyle = remember(colors.symbolBarForeground, fieldLineStyle, fieldPlatformStyle) {
+        TextStyle(
+            color = colors.symbolBarForeground.copy(alpha = 0.45f),
+            fontSize = 13.sp,
+            lineHeight = 20.sp,
+            lineHeightStyle = fieldLineStyle,
+            platformStyle = fieldPlatformStyle,
         )
     }
+    val inputTextStyle = remember(colors.foreground, fieldLineStyle, fieldPlatformStyle) {
+        TextStyle(
+            color = colors.foreground,
+            fontSize = 13.sp,
+            fontFamily = FontFamily.Monospace,
+            lineHeight = 20.sp,
+            lineHeightStyle = fieldLineStyle,
+            platformStyle = fieldPlatformStyle,
+        )
+    }
+    val keyboardOptions = remember(keyboardType) {
+        KeyboardOptions(imeAction = ImeAction.Search, keyboardType = keyboardType)
+    }
+    BasicTextField(
+        state = state,
+        // 宽度交给调用方（Row 内 weight 弹性分配），只兜一个可点/可读的下限。
+        modifier = modifier
+            .widthIn(min = 72.dp)
+            .clip(BAR_CHIP_SHAPE)
+            .background(colors.background.copy(alpha = 0.6f)),
+        textStyle = inputTextStyle,
+        keyboardOptions = keyboardOptions,
+        onKeyboardAction = { onImeSearch() },
+        lineLimits = TextFieldLineLimits.SingleLine,
+        inputTransformation = inputTransformation,
+        cursorBrush = SolidColor(colors.cursor),
+        decorator = { innerTextField ->
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                if (state.text.isEmpty()) {
+                    BasicText(
+                        text = placeholder,
+                        style = placeholderStyle,
+                    )
+                }
+                innerTextField()
+            }
+        },
+    )
 }
 
 /** 开关小片（大小写 / 整词 / 正则）：亮起表示开。 */
@@ -233,20 +238,20 @@ internal fun FindField(
 private fun ToggleChip(label: String, on: Boolean, colors: EditorColors, onToggle: (Boolean) -> Unit) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(BAR_CHIP_SHAPE)
             .background(if (on) colors.symbolBarPressed else Color.Transparent)
             .pointerInput(label, on) { detectTapGestures(onTap = { onToggle(!on) }) }
             .defaultMinSize(minWidth = 28.dp, minHeight = 28.dp)
             .padding(horizontal = 6.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(
-            text = label,
-            style = TextStyle(
+        val chipStyle = remember(colors.symbolBarForeground, on) {
+            TextStyle(
                 color = colors.symbolBarForeground.copy(alpha = if (on) 1f else 0.6f),
                 fontSize = 12.sp,
-            ),
-        )
+            )
+        }
+        BasicText(text = label, style = chipStyle)
     }
 }
 
@@ -256,8 +261,8 @@ internal fun ActionChip(label: String, colors: EditorColors, onClick: () -> Unit
     var pressed by remember { mutableStateOf(false) }
     Box(
         Modifier
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (pressed) colors.symbolBarPressed else Color.Transparent)
+            .clip(BAR_CHIP_SHAPE)
+            .drawBehind { if (pressed) drawRect(colors.symbolBarPressed) }
             .pointerInput(label) {
                 detectTapGestures(
                     onPress = {
@@ -272,6 +277,9 @@ internal fun ActionChip(label: String, colors: EditorColors, onClick: () -> Unit
             .padding(horizontal = 6.dp, vertical = 5.dp),
         contentAlignment = Alignment.Center,
     ) {
-        BasicText(text = label, style = TextStyle(color = colors.symbolBarForeground, fontSize = 12.sp))
+        val chipStyle = remember(colors.symbolBarForeground) {
+            TextStyle(color = colors.symbolBarForeground, fontSize = 12.sp)
+        }
+        BasicText(text = label, style = chipStyle)
     }
 }
